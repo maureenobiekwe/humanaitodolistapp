@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f4f0e8" />
+    <title>Daymark — make room for what matters</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="src/app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Workspace">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">✳</span><span>daymark<span class="brand-dot">.</span></span></div>
+        <div class="sidebar-body">
+          <p class="eyebrow sidebar-heading">WORKSPACE</p>
+          <nav class="view-nav" aria-label="Task views">
+            <button class="nav-item is-active" data-view="all" type="button"><span class="nav-symbol" aria-hidden="true">◫</span><span>All tasks</span><span class="nav-count" data-count="all">0</span></button>
+            <button class="nav-item" data-view="today" type="button"><span class="nav-symbol" aria-hidden="true">◉</span><span>Today</span><span class="nav-count" data-count="today">0</span></button>
+            <button class="nav-item" data-view="upcoming" type="button"><span class="nav-symbol" aria-hidden="true">▤</span><span>Upcoming</span><span class="nav-count" data-count="upcoming">0</span></button>
+            <button class="nav-item" data-view="completed" type="button"><span class="nav-symbol" aria-hidden="true">✓</span><span>Completed</span><span class="nav-count" data-count="completed">0</span></button>
+          </nav>
+          <div class="sidebar-divider"></div>
+          <div class="section-heading"><p class="eyebrow">PROJECTS</p><span id="project-total" class="section-total">00</span></div>
+          <div id="project-nav" class="project-nav"></div>
+        </div>
+        <div class="sidebar-foot"><span class="foot-spark" aria-hidden="true">✳</span><p>A little space to<br /><em>make things happen.</em></p></div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar"><span id="today-label" class="topbar-date"></span><span class="topbar-note">A clearer day starts here <span aria-hidden="true">↗</span></span></header>
+        <div id="error-banner" class="error-banner" role="alert" hidden></div>
+        <section class="intro" aria-labelledby="page-title">
+          <div><p class="eyebrow intro-kicker"><span class="kicker-line"></span> YOUR PERSONAL WORKSPACE</p><h1 id="page-title">Make room for<br /><em>what matters.</em></h1><p class="intro-copy">A considered place for all the things on your mind.</p></div>
+          <div class="progress-card" aria-label="Task progress"><span class="progress-label">YOUR MOMENTUM</span><div class="progress-number"><strong id="progress-percent">0%</strong><span>done</span></div><div class="progress-track"><span id="progress-bar"></span></div><p id="progress-copy">A fresh start looks good on you.</p></div>
+        </section>
+
+        <section class="task-section" aria-labelledby="list-title">
+          <div class="task-heading"><div><p class="eyebrow task-kicker">THE LIST</p><h2 id="list-title">All tasks <span id="visible-count" class="heading-count">00</span></h2></div><button id="new-task" class="primary-button" type="button"><span aria-hidden="true">＋</span> New task</button></div>
+          <div class="toolbar"><label class="search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg><span class="sr-only">Search task titles</span><input id="search" type="search" placeholder="Search your tasks..." autocomplete="off" /></label><div class="filter-group"><label class="select-wrap"><span class="sr-only">Filter by project</span><select id="project-filter"><option value="">All projects</option></select></label><label class="select-wrap"><span class="sr-only">Filter by priority</span><select id="priority-filter"><option value="">All priorities</option><option value="high">High priority</option><option value="medium">Medium priority</option><option value="low">Low priority</option></select></label></div></div>
+          <div id="task-list" class="task-list" aria-live="polite"></div>
+          <div id="empty-state" class="empty-state" hidden><div class="empty-art" aria-hidden="true"><span>✳</span></div><h3 id="empty-title">A clean slate.</h3><p id="empty-copy">Add a task and give your day a little direction.</p><button id="empty-add" class="text-button" type="button">Create your first task <span aria-hidden="true">↗</span></button></div>
+        </section>
+        <footer class="main-footer"><span>DAYMARK / A PLACE TO BEGIN</span><span>ONE THING AT A TIME <span aria-hidden="true">✳</span></span></footer>
+      </main>
+    </div>
+
+    <dialog id="task-dialog" class="task-dialog" aria-labelledby="dialog-title"><form id="task-form" novalidate><div class="dialog-header"><div><p class="eyebrow">MAKE IT HAPPEN</p><h2 id="dialog-title">A new task</h2></div><button id="close-dialog" class="icon-button close-button" type="button" aria-label="Close task form">×</button></div><div id="dialog-error" class="dialog-error" role="alert" hidden></div><div class="dialog-fields"><label class="field field-full">Task name <input id="task-title" name="title" type="text" maxlength="160" placeholder="What needs doing?" required /></label><div class="field-row"><label class="field">Project <input id="task-project" name="project" type="text" maxlength="60" list="project-options" placeholder="e.g. Personal" /><datalist id="project-options"></datalist></label><label class="field">Due date <input id="task-date" name="dueDate" type="date" /></label></div><label class="field">Priority <select id="task-priority" name="priority"><option value="medium">Medium priority</option><option value="high">High priority</option><option value="low">Low priority</option></select></label><div class="subtask-editor"><div class="subtask-heading"><span>Small steps</span><span id="subtask-count">0 added</span></div><div id="draft-subtasks" class="draft-subtasks"></div><div class="subtask-add"><input id="subtask-input" type="text" maxlength="120" placeholder="Add a step..." aria-label="New subtask" /><button id="add-subtask" type="button" aria-label="Add subtask">＋</button></div></div></div><div class="dialog-actions"><button id="cancel-dialog" class="secondary-button" type="button">Cancel</button><button id="save-task" class="primary-button" type="submit">Create task <span aria-hidden="true">↗</span></button></div></form></dialog>
+    <template id="task-template"><article class="task-card"><button class="task-check" type="button" data-action="toggle" aria-label="Complete task"><span aria-hidden="true">✓</span></button><div class="task-body"><div class="task-topline"><span class="project-tag"></span><span class="priority-tag"></span></div><h3 class="task-title"></h3><div class="task-meta"><span class="due-label"></span><span class="step-label"></span></div><div class="card-subtasks"></div></div><div class="card-actions"><button class="icon-button edit-button" type="button" data-action="edit" aria-label="Edit task">✎</button><button class="icon-button delete-button" type="button" data-action="delete" aria-label="Delete task">×</button></div></article></template>
+  </body>
+</html>
