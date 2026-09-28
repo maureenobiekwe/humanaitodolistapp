@@ -1,10 +1,52 @@
 import { localDate, selectTasks } from './tasks.js';
 import { loadTasks, removeTask, saveTask } from './storage.js';
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+
 const $ = selector => document.querySelector(selector);
-const state = { tasks: [], view: 'all', project: '', priority: '', query: '', editingId: null, draftSubtasks: [] };
+const savedPreferences = JSON.parse(localStorage.getItem('daymark-preferences') || '{}');
+const state = { tasks: [], view: 'all', project: '', priority: '', query: '', layout: savedPreferences.layout || 'list', theme: savedPreferences.theme || 'meadow', soundEnabled: savedPreferences.soundEnabled !== false, editingId: null, draftSubtasks: [] };
 const viewNames = { all: 'All tasks', today: 'Today', upcoming: 'Upcoming', completed: 'Completed' };
 let today = localDate();
+
+function statusFor(task) { return task.status || (task.completed ? 'done' : 'todo'); }
+
+function normalizeTask(task) {
+  return { ...task, description: task.description || '', reaction: task.reaction || '', status: statusFor(task), subtasks: Array.isArray(task.subtasks) ? task.subtasks : [] };
+}
+
+function savePreferences() {
+  localStorage.setItem('daymark-preferences', JSON.stringify({ layout: state.layout, theme: state.theme, soundEnabled: state.soundEnabled }));
+}
+
+function applyPreferences() {
+  document.documentElement.dataset.theme = state.theme;
+  $('#theme-select').value = state.theme;
+  $('#sound-toggle').textContent = state.soundEnabled ? '♫' : '♩';
+  $('#sound-toggle').setAttribute('aria-pressed', String(state.soundEnabled));
+  $('#sound-toggle').setAttribute('aria-label', state.soundEnabled ? 'Turn completion sound off' : 'Turn completion sound on');
+  document.querySelectorAll('[data-layout]').forEach(button => button.classList.toggle('is-active', button.dataset.layout === state.layout));
+}
+
+function playNotificationSound() {
+  if (!state.soundEnabled) return;
+  const audio = new AudioContext();
+  const oscillator = audio.createOscillator();
+  const gain = audio.createGain();
+  oscillator.frequency.value = 660;
+  oscillator.type = 'sine';
+  gain.gain.setValueAtTime(0.0001, audio.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.08, audio.currentTime + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.18);
+  oscillator.connect(gain).connect(audio.destination);
+  oscillator.start();
+  oscillator.stop(audio.currentTime + 0.2);
+  oscillator.addEventListener('ended', () => audio.close(), { once: true });
+}
+
+applyPreferences();
 
 $('#today-label').textContent = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
 
@@ -66,6 +108,10 @@ function renderTask(task) {
   card.querySelector('.priority-tag').textContent = `${task.priority} priority`;
   card.querySelector('.priority-tag').classList.add(`priority-${task.priority}`);
   card.querySelector('.task-title').textContent = task.title;
+  const description = card.querySelector('.task-description');
+  description.textContent = task.description;
+  description.hidden = !task.description;
+  card.querySelector('.reaction-row').querySelectorAll('[data-reaction]').forEach(button => button.classList.toggle('is-selected', button.dataset.reaction === task.reaction));
   const due = card.querySelector('.due-label');
   due.textContent = dateLabel(task.dueDate);
   if (task.dueDate && task.dueDate < today && !task.completed) due.classList.add('is-overdue');
@@ -89,6 +135,7 @@ function renderTask(task) {
   }));
   card.querySelector('.edit-button').setAttribute('aria-label', `Edit ${task.title}`);
   card.querySelector('.delete-button').setAttribute('aria-label', `Delete ${task.title}`);
+  card.dataset.status = statusFor(task);
   return card;
 }
 
@@ -98,12 +145,19 @@ function render() {
   const counts = Object.fromEntries(Object.keys(viewNames).map(view => [view, selectTasks(state.tasks, { view, today }).length]));
   document.querySelectorAll('[data-count]').forEach(element => { element.textContent = counts[element.dataset.count]; });
   document.querySelectorAll('[data-view]').forEach(button => button.classList.toggle('is-active', button.dataset.view === state.view));
-  const visible = selectTasks(state.tasks, { view: state.view, project: state.project, priority: state.priority, query: state.query, today });
+  const visibleTasks = selectTasks(state.tasks, { view: state.view, project: state.project, priority: state.priority, query: state.query, today });
+  const completedVisible = state.layout === 'board' && state.view === 'all' ? selectTasks(state.tasks, { view: 'completed', project: state.project, priority: state.priority, query: state.query, today }) : [];
+  const visible = [...visibleTasks, ...completedVisible];
   $('#list-title').firstChild.textContent = `${viewNames[state.view]} `;
-  $('#visible-count').textContent = String(visible.length).padStart(2, '0');
+  $('#visible-count').textContent = String(visibleTasks.length).padStart(2, '0');
   $('#task-list').replaceChildren(...visible.map(renderTask));
+  $('#task-list').hidden = state.layout !== 'list';
+  $('#task-board').hidden = state.layout !== 'board';
+  document.querySelectorAll('.board-column-list').forEach(list => list.replaceChildren());
+  document.querySelectorAll('[data-column-count]').forEach(count => { count.textContent = visible.filter(task => statusFor(task) === count.dataset.columnCount).length; });
+  visible.forEach(task => { const column = document.querySelector(`[data-status="${statusFor(task)}"] .board-column-list`); if (column) column.append(renderTask(task)); });
   const empty = $('#empty-state');
-  empty.hidden = visible.length > 0;
+  empty.hidden = visibleTasks.length > 0;
   const isFiltered = state.query || state.project || state.priority;
   $('#empty-title').textContent = isFiltered ? 'Nothing in this corner.' : state.view === 'completed' ? 'Nothing finished yet.' : state.view === 'today' ? 'Today is wide open.' : state.view === 'upcoming' ? 'Nothing on the horizon.' : 'A clean slate.';
   $('#empty-copy').textContent = isFiltered ? 'Try another search or adjust your filters.' : state.view === 'completed' ? 'Completed tasks will find a home here.' : state.view === 'all' ? 'Add a task and give your day a little direction.' : 'Add a task whenever something comes to mind.';
@@ -150,6 +204,8 @@ function openDialog(task = null) {
   $('#task-project').value = task?.project || '';
   $('#task-date').value = task?.dueDate || '';
   $('#task-priority').value = task?.priority || 'medium';
+  $('#task-description').value = task?.description || '';
+  $('#task-status').value = statusFor(task || { completed: false });
   $('#subtask-input').value = '';
   renderDraftSubtasks();
   $('#task-dialog').showModal();
@@ -219,20 +275,29 @@ $('#task-form').addEventListener('submit', async event => {
   if ($('#subtask-input').value.trim()) addDraftSubtask();
   const previous = state.tasks.find(task => task.id === state.editingId);
   const now = Date.now();
-  const task = { id: previous?.id || crypto.randomUUID(), title, project: $('#task-project').value.trim(), dueDate: $('#task-date').value, priority: $('#task-priority').value, subtasks: state.draftSubtasks.map(step => ({ ...step })), completed: previous?.completed || false, createdAt: previous?.createdAt || now, updatedAt: now };
+  const status = $('#task-status').value;
+  const task = { id: previous?.id || crypto.randomUUID(), title, description: $('#task-description').value.trim(), project: $('#task-project').value.trim(), dueDate: $('#task-date').value, priority: $('#task-priority').value, status, reaction: previous?.reaction || '', subtasks: state.draftSubtasks.map(step => ({ ...step })), completed: status === 'done', createdAt: previous?.createdAt || now, updatedAt: now };
   $('#save-task').disabled = true;
   const saved = await persist(task, previous);
   $('#save-task').disabled = false;
   if (saved) $('#task-dialog').close();
 });
 $('#task-title').addEventListener('input', () => $('#task-title').setCustomValidity(''));
-$('#task-list').addEventListener('click', async event => {
+$('.task-section').addEventListener('click', async event => {
   const button = event.target.closest('[data-action]');
   if (!button || button.dataset.action === 'subtask') return;
   const task = state.tasks.find(item => item.id === button.closest('[data-id]').dataset.id);
   if (!task) return;
   if (button.dataset.action === 'edit') return openDialog(task);
-  if (button.dataset.action === 'toggle') return persist({ ...task, completed: !task.completed, updatedAt: Date.now() }, task);
+  if (button.dataset.action === 'react') {
+    const reaction = task.reaction === button.dataset.reaction ? '' : button.dataset.reaction;
+    return persist({ ...task, reaction, updatedAt: Date.now() }, task);
+  }
+  if (button.dataset.action === 'toggle') {
+    const completed = !task.completed;
+    if (completed) playNotificationSound();
+    return persist({ ...task, completed, status: completed ? 'done' : 'todo', updatedAt: Date.now() }, task);
+  }
   if (button.dataset.action === 'delete' && confirm(`Delete “${task.title}”?`)) {
     try {
       await removeTask(task.id);
@@ -242,7 +307,7 @@ $('#task-list').addEventListener('click', async event => {
     } catch { showError('This task could not be deleted. Please try again.'); }
   }
 });
-$('#task-list').addEventListener('change', async event => {
+$('.task-section').addEventListener('change', async event => {
   if (event.target.dataset.action !== 'subtask') return;
   const task = state.tasks.find(item => item.id === event.target.closest('[data-id]').dataset.id);
   if (!task) return;
@@ -250,8 +315,28 @@ $('#task-list').addEventListener('change', async event => {
   if (!await persist({ ...task, subtasks, updatedAt: Date.now() }, task)) event.target.checked = !event.target.checked;
 });
 
+$('.task-section').addEventListener('dragstart', event => {
+  const card = event.target.closest('.task-card');
+  if (card) event.dataTransfer.setData('text/plain', card.dataset.id);
+});
+$('#task-board').addEventListener('dragover', event => event.preventDefault());
+$('#task-board').addEventListener('drop', async event => {
+  event.preventDefault();
+  const column = event.target.closest('.board-column');
+  const id = event.dataTransfer.getData('text/plain');
+  const task = state.tasks.find(item => item.id === id);
+  if (!column || !task || statusFor(task) === column.dataset.status) return;
+  const status = column.dataset.status;
+  if (status === 'done') playNotificationSound();
+  await persist({ ...task, status, completed: status === 'done', updatedAt: Date.now() }, task);
+});
+
+$('#theme-select').addEventListener('change', event => { state.theme = event.target.value; savePreferences(); applyPreferences(); });
+$('#sound-toggle').addEventListener('click', () => { state.soundEnabled = !state.soundEnabled; savePreferences(); applyPreferences(); });
+document.querySelectorAll('[data-layout]').forEach(button => button.addEventListener('click', () => { state.layout = button.dataset.layout; savePreferences(); applyPreferences(); render(); }));
+
 try {
-  state.tasks = await loadTasks();
+  state.tasks = (await loadTasks()).map(normalizeTask);
   render();
 } catch {
   showError('Browser storage is unavailable. Your tasks cannot be loaded or saved here.');

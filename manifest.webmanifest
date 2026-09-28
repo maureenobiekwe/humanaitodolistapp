@@ -1,0 +1,18 @@
+{
+  "name": "Daymark - Personal Task Manager",
+  "short_name": "Daymark",
+  "description": "A calm, local-first task manager for making room for what matters.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f4ee",
+  "theme_color": "#f4f0e8",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
